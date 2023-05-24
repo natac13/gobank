@@ -1,6 +1,17 @@
 version: '3.5'
 
 services:
+  # app:
+  #   container_name: gobank
+  #   build: .
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - postgres
+  #   depends_on:
+  #     - postgres
+  #   restart: unless-stopped
+
   postgres:
     container_name: postgres_container
     image: postgres
