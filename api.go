@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type APIServer struct {
@@ -52,7 +53,7 @@ func (s *APIServer) Run() {
 	router.Delete("/account/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleDeleteAccount), s.store))
 	router.Post("/transfer", makeHTTPHandleFunc(s.handleTransfer))
 
-	router.Post("/login/{id}", makeHTTPHandleFunc(s.handleLogin))
+	router.Post("/login", makeHTTPHandleFunc(s.handleLogin))
 
 	log.Println("JSON API serverr is listening on: ", s.listAddr)
 	http.ListenAndServe(s.listAddr, router)
@@ -83,22 +84,18 @@ func (s *APIServer) handleGetAccountByID(w http.ResponseWriter, r *http.Request)
 
 // Creates a new account and returns it
 func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
-	createAccountReq := new(CreateAccountRequest) // &CreateAccountRequest{}
-	if err := json.NewDecoder(r.Body).Decode(createAccountReq); err != nil {
+	req := new(CreateAccountRequest) // &CreateAccountRequest{}
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		return err
 	}
 
-	account := NewAccount(createAccountReq.FirstName, createAccountReq.LastName)
-	if _, err := s.store.CreateAccount(account); err != nil {
-		return err
-	}
-
-	tokenStr, err := createJWTToken(account.ID)
+	account, err := NewAccount(req.FirstName, req.LastName, req.Password)
 	if err != nil {
 		return err
 	}
-
-	fmt.Printf("tokenStr: %s\n", tokenStr)
+	if _, err := s.store.CreateAccount(account); err != nil {
+		return err
+	}
 
 	return WriteJSON(w, http.StatusCreated, account)
 }
@@ -129,22 +126,25 @@ func (s *APIServer) handleTransfer(w http.ResponseWriter, r *http.Request) error
 }
 
 func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
-	// get the account id from the urlAccountId
-	accountID, err := getID(r)
+	if r.Method != http.MethodPost {
+		return fmt.Errorf("Unauthorized")
+	}
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return err
+	}
+	defer r.Body.Close()
 
+	number := req.Number
+	password := req.Password
+
+	account, err := s.store.GetAccountByNumber(int(number))
 	if err != nil {
 		return err
 	}
 
-	// find the account in the db
-	account, err := s.store.GetAccountByID(accountID)
-
-	if err != nil {
-		return err
-	}
-
-	if account == nil || account.ID != accountID {
-		return fmt.Errorf("account not found")
+	if err := bcrypt.CompareHashAndPassword([]byte(account.EncryptedPassword), []byte(password)); err != nil {
+		return fmt.Errorf("Unauthorized")
 	}
 
 	jwtToken, err := createJWTToken(account.ID)
@@ -155,6 +155,24 @@ func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
 
 	// if found then create and JWT token and return it to the user
 	return WriteJSON(w, http.StatusOK, map[string]string{"token": jwtToken})
+	// get the account id from the urlAccountId
+	// accountID, err := getID(r)
+
+	// if err != nil {
+	// 	return err
+	// }
+
+	// // find the account in the db
+	// account, err := s.store.GetAccountByID(accountID)
+
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if account == nil || account.ID != accountID {
+	// 	return fmt.Errorf("account not found")
+	// }
+
 }
 
 func WriteJSON(w http.ResponseWriter, status int, data interface{}) error {
