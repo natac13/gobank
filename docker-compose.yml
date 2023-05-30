@@ -16,6 +16,7 @@ services:
     container_name: postgres_container
     image: postgres
     environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gobank}
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
       PGDATA: /data/postgres
