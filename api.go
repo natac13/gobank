@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	jwt "github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type APIServer struct {
@@ -149,7 +148,8 @@ func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(account.EncryptedPassword), []byte(password)); err != nil {
+	validPassword, err := account.ValidatePassword(password)
+	if err != nil || !validPassword {
 		return fmt.Errorf("Unauthorized")
 	}
 
@@ -159,8 +159,13 @@ func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	resp := LoginResponse{
+		Token:  jwtToken,
+		Number: account.Number,
+	}
+
 	// if found then create and JWT token and return it to the user
-	return WriteJSON(w, http.StatusOK, map[string]string{"token": jwtToken})
+	return WriteJSON(w, http.StatusOK, resp)
 	// get the account id from the urlAccountId
 	// accountID, err := getID(r)
 
